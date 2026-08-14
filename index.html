@@ -47,7 +47,7 @@ const errText=document.getElementById("errText");
 const retry=document.getElementById("retry");
 
 const glasses=new Image();
-glasses.src="./gucci_front.jpg";
+glasses.src="./gucci_front_transparent.png";
 
 let landmarker=null,stream=null,started=false,lastRun=0;
 
@@ -92,11 +92,8 @@ function drawGlasses(lm){
   ctx.rotate(angle);
   ctx.globalAlpha=0.98;
   // Multiply makes the white studio background visually disappear.
-  ctx.globalCompositeOperation="multiply";
   ctx.drawImage(glasses,-targetWidth/2,-targetHeight*0.50,targetWidth,targetHeight);
   ctx.restore();
-
-  ctx.globalCompositeOperation="source-over";
 }
 
 async function loadTracking(){
