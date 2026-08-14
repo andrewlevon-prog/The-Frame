@@ -3,96 +3,104 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Frame — Camera Test</title>
+<title>The Frame — Virtual Try-On</title>
 <style>
-*{box-sizing:border-box}html,body{margin:0;height:100%;background:#000;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-body{display:flex;flex-direction:column}
-header{height:72px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;background:#0b0c10}
-.brand{font-size:21px;font-weight:700}.sub{font-size:12px;color:#9ca3af;margin-top:2px}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;background:#08090c;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+#app{height:100dvh;display:flex;flex-direction:column}
+header{height:82px;padding:18px 20px;background:#08090c;border-bottom:1px solid #191b20}
+.brand{font-size:24px;font-weight:700}
+.sub{font-size:14px;color:#9aa0aa;margin-top:4px}
 #stage{position:relative;flex:1;overflow:hidden;background:#111}
-video{position:absolute;width:100%;height:100%;inset:0;object-fit:cover;transform:scaleX(-1)}
-#message{position:absolute;z-index:2;left:50%;top:20px;transform:translateX(-50%);background:rgba(0,0,0,.65);padding:10px 15px;border-radius:20px;white-space:nowrap;font-size:14px}
-#error{display:none;position:absolute;z-index:4;inset:0;align-items:center;justify-content:center;text-align:center;padding:30px;background:#000}
-.box{max-width:360px}.box h2{font-size:24px;margin:0 0 12px}.box p{color:#aeb5c2;line-height:1.5}
-button{border:0;border-radius:15px;padding:13px 18px;font-weight:600;font-size:15px}
-#start{background:#fff;color:#111;margin-top:8px}
-#bottom{height:105px;background:#0b0c10;display:flex;align-items:center;justify-content:center}
-#capture{width:64px;height:64px;border-radius:50%;background:#fff;border:5px solid #30343c}
+video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scaleX(-1);display:none}
+#message{position:absolute;top:24px;left:50%;transform:translateX(-50%);background:#050505;border-radius:24px;padding:12px 18px;text-align:center;white-space:nowrap;font-size:16px;z-index:3}
+#error{position:absolute;left:20px;right:20px;top:90px;padding:18px;background:#241114;border:1px solid #63333a;border-radius:16px;display:none;z-index:4}
+#bottom{height:140px;background:#08090c;display:flex;align-items:center;justify-content:center}
+button{width:82px;height:82px;border-radius:50%;border:8px solid #2c3038;background:#fff;cursor:pointer;-webkit-tap-highlight-color:transparent}
+button:active{transform:scale(.96)}
+#retry{display:none;margin-top:14px;width:auto;height:auto;border:0;border-radius:12px;padding:12px 18px;background:#fff;color:#111;font-size:16px}
 </style>
 </head>
 <body>
+<div id="app">
 <header>
-  <div><div class="brand">The Frame</div><div class="sub">Virtual Try-On · CAMERA TEST</div></div>
+  <div class="brand">The Frame</div>
+  <div class="sub">Virtual Try-On · CAMERA TEST</div>
 </header>
 
 <main id="stage">
-  <video id="video" playsinline autoplay muted></video>
+  <video id="video" autoplay playsinline muted></video>
   <div id="message">Натисни кнопку, щоб увімкнути камеру</div>
-
   <div id="error">
-    <div class="box">
-      <h2>Камера не запустилась</h2>
-      <p id="errorText"></p>
-      <button id="start">Спробувати ще раз</button>
-    </div>
+    <div id="errorText"></div>
+    <button id="retry" type="button">Спробувати ще раз</button>
   </div>
 </main>
 
-<footer id="bottom">
-  <button id="capture" aria-label="Зробити фото"></button>
-</footer>
+<div id="bottom">
+  <button id="cameraBtn" type="button" aria-label="Увімкнути камеру"></button>
+</div>
+</div>
 
 <script>
-const video=document.getElementById('video');
-const message=document.getElementById('message');
-const error=document.getElementById('error');
-const errorText=document.getElementById('errorText');
-const start=document.getElementById('start');
-let stream=null;
+const video = document.getElementById('video');
+const cameraBtn = document.getElementById('cameraBtn');
+const message = document.getElementById('message');
+const errorBox = document.getElementById('error');
+const errorText = document.getElementById('errorText');
+const retry = document.getElementById('retry');
+
+function showError(text){
+  errorText.textContent = text;
+  errorBox.style.display = 'block';
+  retry.style.display = 'inline-block';
+  message.style.display = 'none';
+}
 
 async function startCamera(){
-  error.style.display='none';
-  message.style.display='block';
-  message.textContent='Запитую доступ до камери…';
+  errorBox.style.display = 'none';
+  retry.style.display = 'none';
+  message.style.display = 'block';
+  message.textContent = 'Запит доступу до камери…';
 
-  try{
-    if(!window.isSecureContext){
-      throw new Error('Сайт відкрито не через HTTPS. Відкрий саме посилання GitHub Pages.');
-    }
-    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
-      throw new Error('Цей браузер не надав доступ до камери для цієї сторінки.');
-    }
+  if (!window.isSecureContext) {
+    showError('Камера працює лише через HTTPS. Відкрий сайт саме через адресу github.io.');
+    return;
+  }
 
-    stream=await navigator.mediaDevices.getUserMedia({
-      video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720}},
-      audio:false
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showError('Цей браузер не надає доступ до камери для цієї сторінки.');
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        facingMode: { ideal: 'user' },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
     });
 
-    video.srcObject=stream;
+    video.srcObject = stream;
+    video.style.display = 'block';
     await video.play();
-
-    message.textContent='Камера працює ✓';
-  }catch(e){
+    message.textContent = 'Камера працює ✓';
+    cameraBtn.style.display = 'none';
+  } catch (e) {
     console.error(e);
-    message.style.display='none';
-    errorText.textContent=(e && e.message) ? e.message : 'Невідома помилка запуску камери.';
-    error.style.display='flex';
+    let text = 'Не вдалося запустити камеру.';
+    if (e.name === 'NotAllowedError') text = 'Доступ до камери заборонено. Дозволь камеру для цього сайту в налаштуваннях браузера.';
+    if (e.name === 'NotFoundError') text = 'Камеру не знайдено.';
+    if (e.name === 'NotReadableError') text = 'Камера зайнята іншою програмою.';
+    if (e.name === 'SecurityError') text = 'Браузер заблокував доступ до камери.';
+    showError(text);
   }
 }
 
-start.addEventListener('click',startCamera);
-
-document.getElementById('capture').addEventListener('click',()=>{
-  if(!video.videoWidth)return;
-  const c=document.createElement('canvas');
-  c.width=video.videoWidth;c.height=video.videoHeight;
-  const x=c.getContext('2d');
-  x.save();x.scale(-1,1);x.drawImage(video,-c.width,0,c.width,c.height);x.restore();
-  const a=document.createElement('a');
-  a.href=c.toDataURL('image/jpeg',.92);
-  a.download='the-frame-camera-test.jpg';
-  a.click();
-});
+cameraBtn.addEventListener('click', startCamera);
+retry.addEventListener('click', startCamera);
 </script>
 </body>
 </html>
