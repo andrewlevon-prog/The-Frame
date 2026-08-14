@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>The Frame — Face Tracking Test</title>
+<title>The Frame — Virtual Try-On</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;width:100%;height:100%;background:#08090d;color:#fff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
@@ -25,214 +25,143 @@ canvas{pointer-events:none}
 </head>
 <body>
 <div id="app">
-<header>
-  <div class="brand">The Frame</div>
-  <div class="sub">Virtual Try-On · FACE TRACKING TEST</div>
-</header>
+<header><div class="brand">The Frame</div><div class="sub">Virtual Try-On · GUCCI TEST</div></header>
 <div id="stage">
-  <video id="video" autoplay playsinline muted></video>
-  <canvas id="overlay"></canvas>
-  <div id="status">Натисни кнопку, щоб почати</div>
-  <div id="err"><div id="errText"></div><button id="retry" type="button">Спробувати ще раз</button></div>
+<video id="video" autoplay playsinline muted></video>
+<canvas id="overlay"></canvas>
+<div id="status">Натисни кнопку, щоб почати</div>
+<div id="err"><div id="errText"></div><button id="retry" type="button">Спробувати ще раз</button></div>
 </div>
-<div id="bottom">
-  <button id="cameraBtn" type="button" aria-label="Увімкнути камеру"></button>
-</div>
+<div id="bottom"><button id="cameraBtn" type="button" aria-label="Увімкнути камеру"></button></div>
 </div>
 
 <script type="module">
-const video = document.getElementById("video");
-const canvas = document.getElementById("overlay");
-const ctx = canvas.getContext("2d");
-const stage = document.getElementById("stage");
-const status = document.getElementById("status");
-const btn = document.getElementById("cameraBtn");
-const err = document.getElementById("err");
-const errText = document.getElementById("errText");
-const retry = document.getElementById("retry");
+const video=document.getElementById("video");
+const canvas=document.getElementById("overlay");
+const ctx=canvas.getContext("2d");
+const stage=document.getElementById("stage");
+const status=document.getElementById("status");
+const btn=document.getElementById("cameraBtn");
+const err=document.getElementById("err");
+const errText=document.getElementById("errText");
+const retry=document.getElementById("retry");
 
-let landmarker = null;
-let stream = null;
-let lastRun = 0;
-let started = false;
+const glasses=new Image();
+glasses.src="./gucci_front.jpg";
 
-const MODEL =
-  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+let landmarker=null,stream=null,started=false,lastRun=0;
 
-function showError(text){
-  errText.textContent = text;
-  err.style.display = "block";
-  status.style.display = "none";
-}
-
-function resizeCanvas(){
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  canvas.width = Math.round(stage.clientWidth * dpr);
-  canvas.height = Math.round(stage.clientHeight * dpr);
-  canvas.style.width = stage.clientWidth + "px";
-  canvas.style.height = stage.clientHeight + "px";
+function resize(){
+  const dpr=Math.min(devicePixelRatio||1,2);
+  canvas.width=Math.round(stage.clientWidth*dpr);
+  canvas.height=Math.round(stage.clientHeight*dpr);
+  canvas.style.width=stage.clientWidth+"px";
+  canvas.style.height=stage.clientHeight+"px";
   ctx.setTransform(dpr,0,0,dpr,0,0);
 }
-window.addEventListener("resize", resizeCanvas);
+addEventListener("resize",resize);
 
-function mapPoint(p){
-  const vw = video.videoWidth, vh = video.videoHeight;
-  const sw = stage.clientWidth, sh = stage.clientHeight;
-  if(!vw || !vh) return {x:0,y:0};
-
-  const scale = Math.max(sw/vw, sh/vh);
-  const drawW = vw*scale, drawH = vh*scale;
-  const ox = (sw-drawW)/2, oy = (sh-drawH)/2;
-
-  // Video is visually mirrored, so mirror the landmark x coordinate too.
-  return {
-    x: ox + (1-p.x)*drawW,
-    y: oy + p.y*drawH
-  };
+function point(p){
+  const vw=video.videoWidth,vh=video.videoHeight,sw=stage.clientWidth,sh=stage.clientHeight;
+  const scale=Math.max(sw/vw,sh/vh),dw=vw*scale,dh=vh*scale;
+  const ox=(sw-dw)/2,oy=(sh-dh)/2;
+  return {x:ox+(1-p.x)*dw,y:oy+p.y*dh};
 }
 
-function drawTracking(landmarks){
-  const sw = stage.clientWidth, sh = stage.clientHeight;
-  ctx.clearRect(0,0,sw,sh);
+function drawGlasses(lm){
+  ctx.clearRect(0,0,stage.clientWidth,stage.clientHeight);
+  if(!glasses.complete || !glasses.naturalWidth) return;
 
-  // A few stable face points — this is our first visual proof that tracking works.
-  const indices = [33,133,362,263,468,473,1,61,291];
-  ctx.fillStyle = "#ffffff";
-  for(const i of indices){
-    if(!landmarks[i]) continue;
-    const p = mapPoint(landmarks[i]);
-    ctx.beginPath();
-    ctx.arc(p.x,p.y,3.5,0,Math.PI*2);
-    ctx.fill();
-  }
+  const le=point(lm[33]), li=point(lm[133]);
+  const ri=point(lm[362]), re=point(lm[263]);
+  const leftEye={x:(le.x+li.x)/2,y:(le.y+li.y)/2};
+  const rightEye={x:(ri.x+re.x)/2,y:(ri.y+re.y)/2};
 
-  // Temporary "virtual glasses" frame based on eye corners.
-  // This will be replaced by the real product frame later.
-  if(landmarks[33] && landmarks[133] && landmarks[362] && landmarks[263]){
-    const a=mapPoint(landmarks[33]);
-    const b=mapPoint(landmarks[133]);
-    const c=mapPoint(landmarks[362]);
-    const d=mapPoint(landmarks[263]);
+  const eyeDist=Math.hypot(rightEye.x-leftEye.x,rightEye.y-leftEye.y);
+  const angle=Math.atan2(rightEye.y-leftEye.y,rightEye.x-leftEye.x);
 
-    const leftW=Math.hypot(a.x-b.x);
-    const rightW=Math.hypot(c.x-d.x);
-    const pad=Math.max(leftW,rightW)*0.22;
+  // The source image is 830 px wide. Its two eye centers are ~200 and ~620 px.
+  const targetWidth=eyeDist*2.08;
+  const targetHeight=targetWidth*(glasses.naturalHeight/glasses.naturalWidth);
 
-    ctx.strokeStyle="#ffffff";
-    ctx.lineWidth=3;
-    ctx.lineJoin="round";
+  const cx=(leftEye.x+rightEye.x)/2;
+  const cy=(leftEye.y+rightEye.y)/2;
 
-    function frame(p1,p2,w){
-      const dx=p2.x-p1.x, dy=p2.y-p1.y;
-      const len=Math.hypot(dx,dy)||1;
-      const nx=-dy/len, ny=dx/len;
-      const q1={x:p1.x-nx*pad,y:p1.y-ny*pad};
-      const q2={x:p2.x-nx*pad,y:p2.y-ny*pad};
-      const q3={x:p2.x+nx*pad,y:p2.y+ny*pad};
-      const q4={x:p1.x+nx*pad,y:p1.y+ny*pad};
-      ctx.beginPath();
-      ctx.moveTo(q1.x,q1.y);ctx.lineTo(q2.x,q2.y);
-      ctx.lineTo(q3.x,q3.y);ctx.lineTo(q4.x,q4.y);
-      ctx.closePath();ctx.stroke();
-    }
-    frame(a,b,leftW);
-    frame(c,d,rightW);
+  ctx.save();
+  ctx.translate(cx,cy+eyeDist*0.01);
+  ctx.rotate(angle);
+  ctx.globalAlpha=0.98;
+  // Multiply makes the white studio background visually disappear.
+  ctx.globalCompositeOperation="multiply";
+  ctx.drawImage(glasses,-targetWidth/2,-targetHeight*0.50,targetWidth,targetHeight);
+  ctx.restore();
 
-    const bridgeY=(b.y+c.y)/2;
-    ctx.beginPath();
-    ctx.moveTo(b.x,bridgeY);
-    ctx.quadraticCurveTo((b.x+c.x)/2,bridgeY-5,(c.x),bridgeY);
-    ctx.stroke();
-  }
+  ctx.globalCompositeOperation="source-over";
 }
 
-async function loadLandmarker(){
-  status.textContent="Завантажую розпізнавання обличчя…";
-
-  // Import the official MediaPipe Tasks Vision package from jsDelivr.
-  const {FilesetResolver, FaceLandmarker} =
-    await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs");
-
-  const vision = await FilesetResolver.forVisionTasks(
+async function loadTracking(){
+  status.textContent="Завантажую Face Tracking…";
+  const {FilesetResolver,FaceLandmarker}=await import(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/vision_bundle.mjs"
+  );
+  const vision=await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.35/wasm"
   );
-
-  landmarker = await FaceLandmarker.createFromOptions(vision,{
-    baseOptions:{modelAssetPath:MODEL},
-    runningMode:"VIDEO",
-    numFaces:1,
-    minFaceDetectionConfidence:0.5,
-    minFacePresenceConfidence:0.5,
-    minTrackingConfidence:0.5
+  landmarker=await FaceLandmarker.createFromOptions(vision,{
+    baseOptions:{modelAssetPath:
+      "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task"},
+    runningMode:"VIDEO",numFaces:1,
+    minFaceDetectionConfidence:.5,minFacePresenceConfidence:.5,minTrackingConfidence:.5
   });
 }
 
 function loop(now){
-  if(!started || !landmarker) return;
-
-  if(video.readyState >= 2 && now-lastRun > 80){
+  if(!started||!landmarker)return;
+  if(video.readyState>=2&&now-lastRun>70){
     lastRun=now;
     try{
-      const result=landmarker.detectForVideo(video,now);
-      if(result.faceLandmarks && result.faceLandmarks.length){
-        drawTracking(result.faceLandmarks[0]);
+      const r=landmarker.detectForVideo(video,now);
+      if(r.faceLandmarks?.length){
+        drawGlasses(r.faceLandmarks[0]);
         status.textContent="Обличчя знайдено ✓";
       }else{
         ctx.clearRect(0,0,stage.clientWidth,stage.clientHeight);
-        status.textContent="Не бачу обличчя — подивись у камеру";
+        status.textContent="Подивись прямо в камеру";
       }
-    }catch(e){
-      console.error(e);
-    }
+    }catch(e){console.error(e)}
   }
   requestAnimationFrame(loop);
 }
 
 async function start(){
-  err.style.display="none";
-  status.style.display="block";
-  status.textContent="Запитую камеру…";
-
+  err.style.display="none";status.style.display="block";
   try{
-    if(!window.isSecureContext) throw new Error("HTTPS_REQUIRED");
-    if(!navigator.mediaDevices?.getUserMedia) throw new Error("NO_CAMERA_API");
-
+    if(!isSecureContext)throw Error("HTTPS_REQUIRED");
+    if(!navigator.mediaDevices?.getUserMedia)throw Error("NO_CAMERA_API");
     if(!stream){
       stream=await navigator.mediaDevices.getUserMedia({
-        video:{
-          facingMode:{ideal:"user"},
-          width:{ideal:1280},
-          height:{ideal:720}
-        },
-        audio:false
+        video:{facingMode:{ideal:"user"},width:{ideal:1280},height:{ideal:720}},audio:false
       });
       video.srcObject=stream;
       await video.play();
     }
-
-    resizeCanvas();
+    resize();
+    if(!glasses.complete)await new Promise(r=>{glasses.onload=r});
     btn.style.display="none";
-    status.textContent="Камера працює. Готую Face Tracking…";
-
-    if(!landmarker) await loadLandmarker();
-
+    await loadTracking();
     started=true;
+    status.textContent="Готово — дивись у камеру";
     requestAnimationFrame(loop);
   }catch(e){
-    console.error(e);
-    let msg="Не вдалося запустити тест.";
-    if(e.message==="HTTPS_REQUIRED") msg="Потрібно відкрити сайт через HTTPS.";
-    else if(e.message==="NO_CAMERA_API") msg="Браузер не надає доступ до камери.";
-    else if(e.name==="NotAllowedError") msg="Доступ до камери заборонено.";
-    else if(e.name==="NotFoundError") msg="Камеру не знайдено.";
-    else if(e.name==="NotReadableError") msg="Камера зайнята іншою програмою.";
-    else if(e.message) msg += " " + e.message;
-    showError(msg);
+    let m="Помилка запуску.";
+    if(e.name==="NotAllowedError")m="Дозвіл на камеру заборонено.";
+    else if(e.message==="HTTPS_REQUIRED")m="Потрібен HTTPS.";
+    else if(e.message==="NO_CAMERA_API")m="Камера недоступна.";
+    else if(e.message)m+=" "+e.message;
+    errText.textContent=m;err.style.display="block";status.style.display="none";
   }
 }
-
-btn.addEventListener("click",start);
-retry.addEventListener("click",start);
+btn.onclick=start;retry.onclick=start;
 </script>
 </body>
 </html>
